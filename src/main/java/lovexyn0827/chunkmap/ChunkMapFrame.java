@@ -21,6 +21,7 @@ import javax.swing.JButton;
 import javax.swing.JDialog;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
+import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.SwingConstants;
@@ -73,11 +74,13 @@ public class ChunkMapFrame extends JFrame {
 		this.status.setSize(480, 20);
 		this.status.setText("Initializated");
 		this.add(this.status, "South");
-		this.logArea = new JTextArea(500, 30);
+		this.logArea = new JTextArea(80, 30);
+		
 		this.info("The server started");
 		this.logArea.setSize(480, 130);
-		this.logArea.setEditable(false);
-		this.add(this.logArea, "Center");
+		JScrollPane jsp = new JScrollPane(this.logArea);
+		jsp.setSize(480, 130);
+		this.add(jsp, "Center");
 		this.center = new ChunkPos(0, 0);
 		this.map.addMouseListener(new MouseAdapter() {
 			@Override
