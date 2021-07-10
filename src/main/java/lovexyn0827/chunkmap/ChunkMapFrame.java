@@ -3,7 +3,6 @@ package lovexyn0827.chunkmap;
 import java.awt.BorderLayout;
 import java.awt.Canvas;
 import java.awt.Color;
-import java.awt.Dialog;
 import java.awt.FlowLayout;
 import java.awt.Graphics;
 import java.awt.Image;
@@ -15,11 +14,16 @@ import java.awt.event.MouseEvent;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+
 import javax.swing.JButton;
+import javax.swing.JDialog;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
+import javax.swing.SwingConstants;
 
 import com.google.common.collect.ImmutableMap;
 
@@ -34,6 +38,7 @@ import net.minecraft.server.world.ChunkTicketType;
 import net.minecraft.server.world.ServerChunkManager;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.server.world.ThreadedAnvilChunkStorage;
+import net.minecraft.util.Util;
 import net.minecraft.util.collection.SortedArraySet;
 import net.minecraft.util.math.ChunkPos;
 import net.minecraft.world.World;
@@ -53,10 +58,11 @@ public class ChunkMapFrame extends JFrame {
 	private JLabel status;
 	private JTextArea logArea;
 	private DisplayMode mode = DisplayMode.CHUNK_LOADING;
+	protected long lastClick;
 
 	public ChunkMapFrame(MinecraftServer server) {
-		super("ChunkMap v20210709--" + server.getSaveProperties().getLevelName());
-		this.setSize(640, 530);
+		super("ChunkMap v20210710--" + server.getSaveProperties().getLevelName());
+		this.setSize(490, 640);
 		this.setLayout(new BorderLayout());
 		this.server = server;
 		this.world = server.getOverworld();
@@ -64,17 +70,24 @@ public class ChunkMapFrame extends JFrame {
 		this.map.setSize(480, 480);
 		this.add(this.map, "North");
 		this.status = new JLabel();
-		this.status.setSize(640, 20);
+		this.status.setSize(480, 20);
 		this.status.setText("Initializated");
 		this.add(this.status, "South");
-		this.logArea = new JTextArea();
-		this.logArea.setSize(160, 530);
-		this.add(this.logArea, "East");
+		this.logArea = new JTextArea(500, 30);
+		this.info("The server started");
+		this.logArea.setSize(480, 130);
+		this.logArea.setEditable(false);
+		this.add(this.logArea, "Center");
 		this.center = new ChunkPos(0, 0);
 		this.map.addMouseListener(new MouseAdapter() {
 			@Override
 			public void mouseClicked(MouseEvent e) {
-				ChunkMapFrame.this.showChunkDetails(e.getX() / 16, e.getY() / 16);
+				if(e.getButton() == MouseEvent.BUTTON1) {
+					if(Util.getMeasuringTimeMs() - ChunkMapFrame.this.lastClick < 827) {
+						ChunkMapFrame.this.showChunkDetails(e.getX() / 16, e.getY() / 16);
+					}
+					ChunkMapFrame.this.lastClick = Util.getMeasuringTimeMs();
+				}
 			}
 		});
 		this.map.addKeyListener(new KeyAdapter() {
@@ -104,8 +117,8 @@ public class ChunkMapFrame extends JFrame {
 					ChunkMapFrame.this.world = ChunkMapFrame.this.server.getWorld(World.END);
 					break;
 				case 'm':
-					Dialog dia = new Dialog(ChunkMapFrame.this);
-					dia.setSize(100,80);
+					JDialog dia = new JDialog(ChunkMapFrame.this);
+					dia.setSize(100,150);
 					dia.setLayout(new FlowLayout(FlowLayout.CENTER));
 					JTextField x = new JTextField(6);
 					JTextField z = new JTextField(6);
@@ -132,10 +145,60 @@ public class ChunkMapFrame extends JFrame {
 				case 't':
 					ChunkMapFrame.this.setMode(DisplayMode.TICKETS);
 					break;
+				case 'h':
+					ChunkMapFrame.this.openHelps();
+					break;
 				}
 			}
 		});
 		this.setVisible(true);
+	}
+
+	protected void openHelps() {
+		JDialog dia = new JDialog(ChunkMapFrame.this);
+		dia.setSize(220, 500);
+		int y = 0;
+		JLabel l1 = new JLabel("Loading Type");
+		l1.setBounds(0, y, 220, 16);
+		dia.add(l1);
+		y += 16;
+		for(Map.Entry<ChunkHolder.LevelType, Integer> entry : LOADING_LVL_TO_COLOR.entrySet()) {
+			JLabel l = new JLabel(LOADING_LVL_TO_NAME.get(entry.getKey()), 
+					new ExampleChunkIcon(entry.getValue()), 
+					SwingConstants.LEFT);
+			l.setBounds(0, y, 220, 16);
+			dia.add(l);
+			y += 16;
+		}
+		
+		JLabel l2 = new JLabel("Chunk Status");
+		l2.setBounds(0, y, 220, 16);
+		dia.add(l2);
+		y += 16;
+		for(Map.Entry<ChunkStatus, Integer> entry : CHUNK_STATUS_TO_COLOR.entrySet()) {
+			JLabel l = new JLabel(entry.getKey().getId(), 
+					new ExampleChunkIcon(entry.getValue()), 
+					SwingConstants.LEFT);
+			l.setBounds(0, y, 220, 16);
+			dia.add(l);
+			y += 16;
+		}
+		
+		JLabel l3 = new JLabel("Ticket Type");
+		l3.setBounds(0, y, 220, 16);
+		dia.add(l3);
+		y += 16;
+		for(Entry<ChunkTicketType<?>, Integer> entry : TICKET_TO_COLOR.entrySet()) {
+			JLabel l = new JLabel(entry.getKey().toString(), 
+					new ExampleChunkIcon(entry.getValue()), 
+					SwingConstants.LEFT);
+			l.setBounds(0, y, 220, 16);
+			dia.add(l);
+			y += 16;
+		}
+		
+		dia.add(new JLabel());
+		dia.setVisible(true);
 	}
 
 	protected void setMode(DisplayMode mode) {
@@ -150,19 +213,23 @@ public class ChunkMapFrame extends JFrame {
 		ChunkTicketManager ctm = ((ThreadedAnvilChunkStorageMixin)tacs).getTM();
 		ChunkPos pos = new ChunkPos(x0 + dx, z0 + dz);
 		ChunkHolder ch = ((ThreadedAnvilChunkStorageMixin)tacs).getCH(pos.toLong());
-		Dialog dia = new Dialog(this);
+		JDialog dia = new JDialog(this);
 		dia.setSize(250,160);
 		dia.setLayout(new FlowLayout(FlowLayout.CENTER, 50, 5));
 		dia.add(new JLabel("Pos : " + pos + ""));
-		dia.add(new JLabel("Status : " + ch.getCurrentStatus()));
-		dia.add(new JLabel("Loading Level : " + ch.getLevel() + "(" + LOADING_LVL_TO_NAME.get(ChunkHolder.getLevelType(ch.getLevel())) + ")"));
-		dia.add(new JLabel("Tickets : " + ((ChunkTicketManagerMixin)ctm).getTicketsAt()
-				.computeIfAbsent(pos.toLong(), (p) -> SortedArraySet.<ChunkTicket<?>>create(4))
-				.stream()
-				.map(ChunkTicket::getType)
-				.map(Object::toString)
-				.reduce((r, t) -> r + "," +t)
-				.orElse("Nothing")));
+		if(ch != null) {
+			dia.add(new JLabel("Status : " + ch.getCurrentStatus()));
+			dia.add(new JLabel("Loading Level : " + ch.getLevel() + "(" + LOADING_LVL_TO_NAME.get(ChunkHolder.getLevelType(ch.getLevel())) + ")"));
+			dia.add(new JLabel("Tickets : " + ((ChunkTicketManagerMixin)ctm).getTicketsAt()
+					.computeIfAbsent(pos.toLong(), (p) -> SortedArraySet.<ChunkTicket<?>>create(4))
+					.stream()
+					.map(ChunkTicket::getType)
+					.map(Object::toString)
+					.reduce((r, t) -> r + "," +t)
+					.orElse("Nothing")));
+		} else {
+			dia.add(new JLabel("Chunk Unloaded"));
+		}
 		JButton b = new JButton("    Close    ");
 		b.addActionListener((ae) -> dia.setVisible(false));
 		dia.add(b);
@@ -170,10 +237,10 @@ public class ChunkMapFrame extends JFrame {
 	}
 
 	public void tick() {
-		this.setSize(640, 530);
+		this.setSize(490, 640);
 		int ticksToAS = 6000 - this.server.getTicks() % 6000;
 		if(ticksToAS == 0) {
-			this.info("Autosave was performed in tick" + this.world.getTime());
+			this.info("Autosave was performed in tick " + this.world.getTime());
 		}
 		ServerChunkManager scm = this.world.getChunkManager();
 		ThreadedAnvilChunkStorage tacs = scm.threadedAnvilChunkStorage;
@@ -196,7 +263,7 @@ public class ChunkMapFrame extends JFrame {
 					} else {
 						g.setColor(new Color(LOADING_LVL_TO_COLOR.get(ChunkHolder.getLevelType(ch.getLevel()))));
 						g.fillRect(dx * 16, dz * 16, dx * 16 + 16, dz * 16 + 16);
-						g.setColor(Color.BLACK);
+						g.setColor(this.world.isChunkLoaded(pos.x, pos.z) ? Color.BLACK : Color.GRAY);
 						g.drawString(Integer.toString(ch.getLevel()), dx * 16, dz * 16 + 16);
 					}
 					break;
@@ -218,6 +285,7 @@ public class ChunkMapFrame extends JFrame {
 							.map(ChunkTicket::getType)
 							.map(TICKET_TO_COLOR::get)
 							.map(Color::new)
+							.filter((c) -> !colors.contains(c))
 							.forEach((colors::add));
 					int[] widths;
 					switch(colors.size()) {
@@ -272,7 +340,7 @@ public class ChunkMapFrame extends JFrame {
 	}
 	
 	private void info(String string) {
-		this.logArea.append(Instant.now().toString() + " : " + string);
+		this.logArea.append(Instant.now().toString() + " : " + string + '\n');
 	}
 
 	static {

@@ -1,5 +1,7 @@
 package lovexyn0827.chunkmap;
 
+import javax.swing.WindowConstants;
+
 import net.fabricmc.api.ModInitializer;
 import net.minecraft.server.MinecraftServer;
 
@@ -19,11 +21,11 @@ public class ChunkMapMod implements ModInitializer {
 
 	public void onServerStarted(MinecraftServer server) {
 		this.chunkmap = new ChunkMapFrame(server);
+		this.chunkmap.setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
 	}
 
 	public void onServerShutdown(MinecraftServer server) {
-		// TODO Auto-generated method stub
-		
+		this.chunkmap.setVisible(false);
 	}
 
 }
