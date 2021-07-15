@@ -16,12 +16,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-
 import javax.swing.JButton;
 import javax.swing.JDialog;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JScrollPane;
+import javax.swing.JTable;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.SwingConstants;
@@ -29,7 +29,9 @@ import javax.swing.SwingConstants;
 import com.google.common.collect.ImmutableMap;
 
 import lovexyn0827.chunkmap.mixins.ChunkTicketManagerMixin;
+import lovexyn0827.chunkmap.mixins.ChunkTicketMixin;
 import lovexyn0827.chunkmap.mixins.ThreadedAnvilChunkStorageMixin;
+import net.minecraft.entity.Entity;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.world.ChunkHolder;
 import net.minecraft.server.world.ChunkHolder.LevelType;
@@ -41,9 +43,13 @@ import net.minecraft.server.world.ServerWorld;
 import net.minecraft.server.world.ThreadedAnvilChunkStorage;
 import net.minecraft.util.Util;
 import net.minecraft.util.collection.SortedArraySet;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Box;
 import net.minecraft.util.math.ChunkPos;
+import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
 import net.minecraft.world.chunk.ChunkStatus;
+import net.minecraft.world.chunk.WorldChunk;
 
 @SuppressWarnings("serial")
 public class ChunkMapFrame extends JFrame {
@@ -60,9 +66,10 @@ public class ChunkMapFrame extends JFrame {
 	private JTextArea logArea;
 	private DisplayMode mode = DisplayMode.CHUNK_LOADING;
 	protected long lastClick;
+	protected boolean renderEntityOverlay;
 
 	public ChunkMapFrame(MinecraftServer server) {
-		super("ChunkMap v20210710--" + server.getSaveProperties().getLevelName());
+		super("ChunkMap v20210712--" + server.getSaveProperties().getLevelName());
 		this.setSize(490, 640);
 		this.setLayout(new BorderLayout());
 		this.server = server;
@@ -151,6 +158,9 @@ public class ChunkMapFrame extends JFrame {
 				case 'h':
 					ChunkMapFrame.this.openHelps();
 					break;
+				case 'e':
+					ChunkMapFrame.this.renderEntityOverlay ^= true;
+					break;
 				}
 			}
 		});
@@ -217,22 +227,63 @@ public class ChunkMapFrame extends JFrame {
 		ChunkPos pos = new ChunkPos(x0 + dx, z0 + dz);
 		ChunkHolder ch = ((ThreadedAnvilChunkStorageMixin)tacs).getCH(pos.toLong());
 		JDialog dia = new JDialog(this);
-		dia.setSize(250,160);
+		dia.setSize(460,640);
 		dia.setLayout(new FlowLayout(FlowLayout.CENTER, 50, 5));
-		dia.add(new JLabel("Pos : " + pos + ""));
+		dia.add(new JLabel("              Pos : " + pos + "               "));
 		if(ch != null) {
-			dia.add(new JLabel("Status : " + ch.getCurrentStatus()));
-			dia.add(new JLabel("Loading Level : " + ch.getLevel() + "(" + LOADING_LVL_TO_NAME.get(ChunkHolder.getLevelType(ch.getLevel())) + ")"));
-			dia.add(new JLabel("Tickets : " + ((ChunkTicketManagerMixin)ctm).getTicketsAt()
+			dia.add(new JLabel("                 Status : " + ch.getCurrentStatus() + "               "));
+			dia.add(new JLabel("               Loading Level : " + ch.getLevel() + "(" + LOADING_LVL_TO_NAME.get(ChunkHolder.getLevelType(ch.getLevel())) + ")" + "               "));
+			List<String[]> list = new ArrayList<>();
+			list.add(new String[] {"Type", "Age", "Source"});
+			((ChunkTicketManagerMixin)ctm).getTicketsAt()
 					.computeIfAbsent(pos.toLong(), (p) -> SortedArraySet.<ChunkTicket<?>>create(4))
-					.stream()
-					.map(ChunkTicket::getType)
-					.map(Object::toString)
-					.reduce((r, t) -> r + "," +t)
-					.orElse("Nothing")));
+					.forEach((t) -> {
+						ChunkTicketMixin tm = (ChunkTicketMixin)(Object)t;
+						list.add(new String[] {
+								t.getType().toString(), 
+								Long.toString(tm.getAge()), 
+								tm.getSource().toString()
+						});
+					});
+			if(list.isEmpty()) {
+				dia.add(new JLabel("No Ticket"));
+			} else {
+				Object[][] content = new Object[list.size()][];
+				int i = 0;
+				for(Object obj : list.toArray()) {
+					content[i++] = (Object[])obj;
+				}
+				
+				JTable table = new JTable(content, content[0]);
+				dia.add(table);
+			}
+			WorldChunk chunk = ch.getWorldChunk();
+			if(chunk != null) {
+				List<Entity> entities = new ArrayList<>();
+				chunk.collectOtherEntities(null, new Box(new BlockPos(x0 * 16, -65536, z0 * 16)).stretch(480, 10E7, 480), entities, null);
+				String[][] content = new String[entities.size()][];
+				for(Entity e : entities) {
+					Vec3d p = e.getPos();
+					content[entities.indexOf(e)] = new String[] {
+							e.getType().getTranslationKey().replaceAll("[0-9a-z_]*\\.", "") + '(' + e.getEntityId() + ')', 
+							Integer.toString(e.age), 
+							Double.toString(p.x), 
+							Double.toString(p.y), 
+							Double.toString(p.z), 
+					};
+				}
+				
+				JTable table = new JTable(content, new String[] {"Type(ID)", "Age", "X", "Y", "Z"});
+				table.setAutoResizeMode(JTable.AUTO_RESIZE_ALL_COLUMNS);
+				table.setSize(480, 100);
+				JScrollPane jsp = new JScrollPane(table);
+				jsp.setSize(480, 200);
+				dia.add(jsp);
+			}
 		} else {
 			dia.add(new JLabel("Chunk Unloaded"));
 		}
+		
 		JButton b = new JButton("    Close    ");
 		b.addActionListener((ae) -> dia.setVisible(false));
 		dia.add(b);
@@ -242,7 +293,7 @@ public class ChunkMapFrame extends JFrame {
 	public void tick() {
 		this.setSize(490, 640);
 		int ticksToAS = 6000 - this.server.getTicks() % 6000;
-		if(ticksToAS == 0) {
+		if(ticksToAS == 6000) {
 			this.info("Autosave was performed in tick " + this.world.getTime());
 		}
 		ServerChunkManager scm = this.world.getChunkManager();
@@ -269,7 +320,9 @@ public class ChunkMapFrame extends JFrame {
 						g.setColor(this.world.isChunkLoaded(pos.x, pos.z) ? Color.BLACK : Color.GRAY);
 						g.drawString(Integer.toString(ch.getLevel()), dx * 16, dz * 16 + 16);
 					}
+					
 					break;
+					
 				case GENERATION:
 					if(ch != null) {
 						ChunkStatus status = ch.getCurrentStatus();
@@ -278,6 +331,7 @@ public class ChunkMapFrame extends JFrame {
 							g.fillRect(dx * 16, dz * 16, 16, 16);
 						}
 					}
+					
 					break;
 				case TICKETS:
 					ChunkTicketManager ctm = ((ThreadedAnvilChunkStorageMixin)tacs).getTM();
@@ -307,6 +361,7 @@ public class ChunkMapFrame extends JFrame {
 						widths = new int[] {4, 4, 4, 4};
 						break;
 					}
+					
 					if(ch != null) {
 						int xOffset = 0;
 						for(int i = 0; i < widths.length; i++) {
@@ -315,12 +370,21 @@ public class ChunkMapFrame extends JFrame {
 							xOffset += widths[i];
 						}
 					}
+					
 					break;
 				}
 			}
 		}
-		
+
 		g.setColor(Color.BLACK);
+		Vec3d origin = new Vec3d(x0 * 16, 0, z0 * 16);
+		if(this.renderEntityOverlay) {
+			for(Entity e : this.world.getOtherEntities(null, new Box(new BlockPos(x0 * 16, -65536, z0 * 16)).stretch(480, 10E7, 480))) {
+				Vec3d p = e.getPos().subtract(origin);
+				g.fillOval((int)p.x - 3, (int)p.z - 3, 6, 6);
+			}
+		}
+		
 		for(int i = 0; i<= 480; i += 16) {
 			g.drawLine(i, 0, i, 480);
 		}

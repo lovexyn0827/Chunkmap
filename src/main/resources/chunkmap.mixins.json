@@ -6,7 +6,8 @@
   "mixins": [
   	"ChunkTicketManagerMixin",
   	"MinecraftServerMixin",
-  	"ThreadedAnvilChunkStorageMixin"
+  	"ThreadedAnvilChunkStorageMixin",
+  	"ChunkTicketMixin"
   ],
   "client": [
   ],
