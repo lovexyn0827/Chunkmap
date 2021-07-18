@@ -49,6 +49,7 @@ import net.minecraft.util.math.Box;
 import net.minecraft.util.math.ChunkPos;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
+import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.chunk.ChunkStatus;
 import net.minecraft.world.chunk.WorldChunk;
 
@@ -59,7 +60,7 @@ public class ChunkMapFrame extends JFrame {
 	private static final ImmutableMap<ChunkTicketType<?>, Integer> TICKET_TO_COLOR;
 	private static final ImmutableMap<LevelType, String> LOADING_LVL_TO_NAME;
 	private static final ImmutableMap<ChunkStatus, Integer> CHUNK_STATUS_TO_COLOR;
-	private static final ChunkTicketType<Void> MANUAL_TICKET = ChunkTicketType.<Void>create("manual", (a, b) -> 0);
+	private static final ChunkTicketType<ChunkPos> MANUAL_TICKET = ChunkTicketType.<ChunkPos>create("manual", (a, b) -> 1);
 	private ServerWorld world;
 	private MinecraftServer server;
 	private Canvas map;
@@ -69,7 +70,7 @@ public class ChunkMapFrame extends JFrame {
 	private DisplayMode mode = DisplayMode.CHUNK_LOADING;
 	private long lastClick;
 	private boolean renderEntityOverlay;
-	private Map<ChunkPos, ChunkTicket<?>> manualLoadedChunks = new HashMap<>();
+	private Map<ChunkPos, ChunkTicket<?>> manuallyLoadedChunks = new HashMap<>();
 
 	public ChunkMapFrame(MinecraftServer server) {
 		super("ChunkMap v20210718--" + server.getSaveProperties().getLevelName());
@@ -109,16 +110,16 @@ public class ChunkMapFrame extends JFrame {
 				ChunkPos pos = ChunkMapFrame.this.center;
 				switch(e.getKeyChar()) {
 				case 'w':
-					ChunkMapFrame.this.center = new ChunkPos(pos.x, pos.z - (e.isControlDown() ? 16 : 1));
+					ChunkMapFrame.this.center = new ChunkPos(pos.x, pos.z - (e.isAltDown() ? 16 : 1));
 					break;
 				case 's':
-					ChunkMapFrame.this.center = new ChunkPos(pos.x, pos.z + (e.isControlDown() ? 16 : 1));
+					ChunkMapFrame.this.center = new ChunkPos(pos.x, pos.z + (e.isAltDown() ? 16 : 1));
 					break;
 				case 'a':
-					ChunkMapFrame.this.center = new ChunkPos(pos.x - (e.isControlDown() ? 16 : 1), pos.z);
+					ChunkMapFrame.this.center = new ChunkPos(pos.x - (e.isAltDown() ? 16 : 1), pos.z);
 					break;
 				case 'd':
-					ChunkMapFrame.this.center = new ChunkPos(pos.x + (e.isControlDown() ? 16 : 1), pos.z);
+					ChunkMapFrame.this.center = new ChunkPos(pos.x + (e.isAltDown() ? 16 : 1), pos.z);
 					break;
 				case '0':
 					ChunkMapFrame.this.world = ChunkMapFrame.this.server.getWorld(World.NETHER);
@@ -167,6 +168,7 @@ public class ChunkMapFrame extends JFrame {
 				}
 			}
 		});
+		
 		this.setVisible(true);
 	}
 
@@ -234,7 +236,11 @@ public class ChunkMapFrame extends JFrame {
 		dia.setLayout(new FlowLayout(FlowLayout.CENTER, 50, 5));
 		dia.add(new JLabel("              Pos : " + pos + "               "));
 		if(ch != null) {
-			dia.add(new JLabel("                 Status : " + ch.getCurrentStatus() + "               "));
+			Chunk c = ch.getCurrentChunk();
+			if(c != null) {
+				dia.add(new JLabel("                 Status : " + ch.getCurrentChunk().getStatus() + "               "));
+			}
+			
 			dia.add(new JLabel("               Loading Level : " + ch.getLevel() + "(" + LOADING_LVL_TO_NAME.get(ChunkHolder.getLevelType(ch.getLevel())) + ")" + "               "));
 			List<String[]> list = new ArrayList<>();
 			list.add(new String[] {"Type", "Age", "Source"});
@@ -288,16 +294,22 @@ public class ChunkMapFrame extends JFrame {
 			dia.add(new JLabel("Chunk Unloaded"));
 		}
 		
-		if(!this.manualLoadedChunks.containsKey(pos) &&(ch == null || ch.getLevel() > 31)) {
+		if(!this.manuallyLoadedChunks.containsKey(pos) &&(ch == null || ch.getLevel() > 31)) {
 			dia.add(new JLabel("      Load the chunk to level "));
 			JTextField jtf = new JTextField("31", 2);
 			dia.add(jtf);
-			JButton b = new JButton("Load       ");
-			b.addActionListener((ae) ->  this.load(ctm, pos, Integer.parseInt(jtf.getText())));
+			JButton b = new JButton("        Load       ");
+			b.addActionListener((ae) ->  {
+				this.load(ctm, pos, Integer.parseInt(jtf.getText()));
+				b.setEnabled(false);
+			});
 			dia.add(b);
-		} else {
+		} else if(this.manuallyLoadedChunks.containsKey(pos)) {
 			JButton b = new JButton("              Unload              ");
-			b.addActionListener((ae) ->  this.unload(ctm, pos));
+			b.addActionListener((ae) ->  {
+				this.unload(ctm, pos);
+				b.setEnabled(false);
+			});
 			dia.add(b);
 		}
 		JButton b = new JButton("           Close            ");
@@ -307,14 +319,15 @@ public class ChunkMapFrame extends JFrame {
 	}
 
 	private void unload(ChunkTicketManager ctm, ChunkPos pos) {
-		((ChunkTicketManagerMixin)ctm).callAddTicket(pos.toLong(), this.manualLoadedChunks.get(pos));
-		this.manualLoadedChunks.remove(pos);
+		ChunkTicket<?> toRemove = this.manuallyLoadedChunks.get(pos);
+		((ChunkTicketManagerMixin)ctm).callRemoveTicket(pos.toLong(), toRemove);
+		this.manuallyLoadedChunks.remove(pos);
 	}
 
 	private void load(ChunkTicketManager ctm, ChunkPos pos, int level) {
-		ChunkTicket<?> ticket = ChunkTicketMixin.create(MANUAL_TICKET, level, null);
+		ChunkTicket<?> ticket = ChunkTicketMixin.<ChunkPos>create(MANUAL_TICKET, level, pos);
 		((ChunkTicketManagerMixin)ctm).callAddTicket(pos.toLong(), ticket);
-		this.manualLoadedChunks.put(pos, ticket);
+		this.manuallyLoadedChunks.put(pos, ticket);
 	}
 
 	public void tick() {
@@ -352,10 +365,13 @@ public class ChunkMapFrame extends JFrame {
 					
 				case GENERATION:
 					if(ch != null) {
-						ChunkStatus status = ch.getCurrentStatus();
-						if(status != null) {
-							g.setColor(new Color(CHUNK_STATUS_TO_COLOR.get(status)));
-							g.fillRect(dx * 16, dz * 16, 16, 16);
+						Chunk c = ch.getCurrentChunk();
+						if(c != null) {
+							ChunkStatus status = ch.getCurrentChunk().getStatus();
+							if(status != null) {
+								g.setColor(new Color(CHUNK_STATUS_TO_COLOR.get(status)));
+								g.fillRect(dx * 16, dz * 16, 16, 16);
+							}
 						}
 					}
 					
@@ -459,6 +475,7 @@ public class ChunkMapFrame extends JFrame {
 				.put(ChunkTicketType.POST_TELEPORT, 0xAA00AA)
 				.put(ChunkTicketType.START, 0xDDFF00)
 				.put(ChunkTicketType.UNKNOWN, 0xFF55FF)
+				.put(MANUAL_TICKET, 0x808080)
 				.build();
 		CHUNK_STATUS_TO_COLOR = new ImmutableMap.Builder<ChunkStatus, Integer>()
 				.put(ChunkStatus.FULL, 0xBBBBBB)

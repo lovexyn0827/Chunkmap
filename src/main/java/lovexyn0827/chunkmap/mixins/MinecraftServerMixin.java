@@ -14,7 +14,7 @@ import net.minecraft.server.MinecraftServer;
 
 @Mixin(MinecraftServer.class)
 public abstract class MinecraftServerMixin {
-	@Inject(method = "tick",at = @At(value = "RETURN"))
+	@Inject(method = "tick",at = @At("RETURN"))
 	public void onTicked(BooleanSupplier bs,CallbackInfo ci) {
 		ChunkMapMod.INSTANCE.onServerTicked((MinecraftServer)(Object)this);
 	}
@@ -29,7 +29,7 @@ public abstract class MinecraftServerMixin {
 		ChunkMapMod.INSTANCE.onServerStarted((MinecraftServer)(Object)this);
 	}
 	
-	@Inject(method = "shutdown",at = @At(value = "RETURN"))
+	@Inject(method = "shutdown",at = @At("RETURN"))
 	public void onServerShutdown(CallbackInfo ci) {
 		ChunkMapMod.INSTANCE.onServerShutdown((MinecraftServer)(Object)this);
 	}
