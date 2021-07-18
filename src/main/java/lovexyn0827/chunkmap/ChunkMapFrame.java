@@ -13,6 +13,7 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -58,6 +59,7 @@ public class ChunkMapFrame extends JFrame {
 	private static final ImmutableMap<ChunkTicketType<?>, Integer> TICKET_TO_COLOR;
 	private static final ImmutableMap<LevelType, String> LOADING_LVL_TO_NAME;
 	private static final ImmutableMap<ChunkStatus, Integer> CHUNK_STATUS_TO_COLOR;
+	private static final ChunkTicketType<Void> MANUAL_TICKET = ChunkTicketType.<Void>create("manual", (a, b) -> 0);
 	private ServerWorld world;
 	private MinecraftServer server;
 	private Canvas map;
@@ -65,11 +67,12 @@ public class ChunkMapFrame extends JFrame {
 	private JLabel status;
 	private JTextArea logArea;
 	private DisplayMode mode = DisplayMode.CHUNK_LOADING;
-	protected long lastClick;
-	protected boolean renderEntityOverlay;
+	private long lastClick;
+	private boolean renderEntityOverlay;
+	private Map<ChunkPos, ChunkTicket<?>> manualLoadedChunks = new HashMap<>();
 
 	public ChunkMapFrame(MinecraftServer server) {
-		super("ChunkMap v20210712--" + server.getSaveProperties().getLevelName());
+		super("ChunkMap v20210718--" + server.getSaveProperties().getLevelName());
 		this.setSize(490, 640);
 		this.setLayout(new BorderLayout());
 		this.server = server;
@@ -106,16 +109,16 @@ public class ChunkMapFrame extends JFrame {
 				ChunkPos pos = ChunkMapFrame.this.center;
 				switch(e.getKeyChar()) {
 				case 'w':
-					ChunkMapFrame.this.center = new ChunkPos(pos.x, pos.z - 1);
+					ChunkMapFrame.this.center = new ChunkPos(pos.x, pos.z - (e.isControlDown() ? 16 : 1));
 					break;
 				case 's':
-					ChunkMapFrame.this.center = new ChunkPos(pos.x, pos.z + 1);
+					ChunkMapFrame.this.center = new ChunkPos(pos.x, pos.z + (e.isControlDown() ? 16 : 1));
 					break;
 				case 'a':
-					ChunkMapFrame.this.center = new ChunkPos(pos.x - 1, pos.z);
+					ChunkMapFrame.this.center = new ChunkPos(pos.x - (e.isControlDown() ? 16 : 1), pos.z);
 					break;
 				case 'd':
-					ChunkMapFrame.this.center = new ChunkPos(pos.x + 1, pos.z);
+					ChunkMapFrame.this.center = new ChunkPos(pos.x + (e.isControlDown() ? 16 : 1), pos.z);
 					break;
 				case '0':
 					ChunkMapFrame.this.world = ChunkMapFrame.this.server.getWorld(World.NETHER);
@@ -235,14 +238,15 @@ public class ChunkMapFrame extends JFrame {
 			dia.add(new JLabel("               Loading Level : " + ch.getLevel() + "(" + LOADING_LVL_TO_NAME.get(ChunkHolder.getLevelType(ch.getLevel())) + ")" + "               "));
 			List<String[]> list = new ArrayList<>();
 			list.add(new String[] {"Type", "Age", "Source"});
-			((ChunkTicketManagerMixin)ctm).getTicketsAt()
+			((ChunkTicketManagerMixin)ctm).getTickets()
 					.computeIfAbsent(pos.toLong(), (p) -> SortedArraySet.<ChunkTicket<?>>create(4))
 					.forEach((t) -> {
 						ChunkTicketMixin tm = (ChunkTicketMixin)(Object)t;
+						Object source = tm.getSource();
 						list.add(new String[] {
 								t.getType().toString(), 
 								Long.toString(tm.getAge()), 
-								tm.getSource().toString()
+								source != null ? source.toString() : "null"
 						});
 					});
 			if(list.isEmpty()) {
@@ -284,10 +288,33 @@ public class ChunkMapFrame extends JFrame {
 			dia.add(new JLabel("Chunk Unloaded"));
 		}
 		
-		JButton b = new JButton("    Close    ");
+		if(!this.manualLoadedChunks.containsKey(pos) &&(ch == null || ch.getLevel() > 31)) {
+			dia.add(new JLabel("      Load the chunk to level "));
+			JTextField jtf = new JTextField("31", 2);
+			dia.add(jtf);
+			JButton b = new JButton("Load       ");
+			b.addActionListener((ae) ->  this.load(ctm, pos, Integer.parseInt(jtf.getText())));
+			dia.add(b);
+		} else {
+			JButton b = new JButton("              Unload              ");
+			b.addActionListener((ae) ->  this.unload(ctm, pos));
+			dia.add(b);
+		}
+		JButton b = new JButton("           Close            ");
 		b.addActionListener((ae) -> dia.setVisible(false));
 		dia.add(b);
 		dia.setVisible(true);
+	}
+
+	private void unload(ChunkTicketManager ctm, ChunkPos pos) {
+		((ChunkTicketManagerMixin)ctm).callAddTicket(pos.toLong(), this.manualLoadedChunks.get(pos));
+		this.manualLoadedChunks.remove(pos);
+	}
+
+	private void load(ChunkTicketManager ctm, ChunkPos pos, int level) {
+		ChunkTicket<?> ticket = ChunkTicketMixin.create(MANUAL_TICKET, level, null);
+		((ChunkTicketManagerMixin)ctm).callAddTicket(pos.toLong(), ticket);
+		this.manualLoadedChunks.put(pos, ticket);
 	}
 
 	public void tick() {
@@ -336,7 +363,7 @@ public class ChunkMapFrame extends JFrame {
 				case TICKETS:
 					ChunkTicketManager ctm = ((ThreadedAnvilChunkStorageMixin)tacs).getTM();
 					List<Color> colors = new ArrayList<>();
-					((ChunkTicketManagerMixin)ctm).getTicketsAt()
+					((ChunkTicketManagerMixin)ctm).getTickets()
 							.computeIfAbsent(pos.toLong(), (p) -> SortedArraySet.<ChunkTicket<?>>create(4))
 							.stream()
 							.map(ChunkTicket::getType)
