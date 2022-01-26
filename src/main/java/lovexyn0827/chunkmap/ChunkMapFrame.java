@@ -73,7 +73,7 @@ public class ChunkMapFrame extends JFrame {
 	private Map<ChunkPos, ChunkTicket<?>> manuallyLoadedChunks = new HashMap<>();
 
 	public ChunkMapFrame(MinecraftServer server) {
-		super("ChunkMap v20210825--" + server.getSaveProperties().getLevelName());
+		super("ChunkMap v20220127--" + server.getSaveProperties().getLevelName());
 		this.setSize(490, 640);
 		this.setLayout(new BorderLayout());
 		this.server = server;
@@ -267,15 +267,17 @@ public class ChunkMapFrame extends JFrame {
 				JTable table = new JTable(content, content[0]);
 				dia.add(table);
 			}
+			
 			WorldChunk chunk = ch.getWorldChunk();
 			if(chunk != null) {
-				List<Entity> entities = new ArrayList<>();
-				chunk.collectOtherEntities(null, new Box(new BlockPos(x0 * 16, -65536, z0 * 16)).stretch(480, 10E7, 480), entities, null);
+				List<Entity> entities = this.world.getOtherEntities(null, 
+						new Box(new BlockPos(x0 * 16, -65536, z0 * 16)).stretch(480, 10E7, 480), 
+						(e) -> e.getChunkPos().equals(pos));
 				String[][] content = new String[entities.size()][];
 				for(Entity e : entities) {
 					Vec3d p = e.getPos();
 					content[entities.indexOf(e)] = new String[] {
-							e.getType().getTranslationKey().replaceAll("[0-9a-z_]*\\.", "") + '(' + e.getEntityId() + ')', 
+							e.getType().getTranslationKey().replaceAll("[0-9a-z_]*\\.", "") + '(' + e.getId() + ')', 
 							Integer.toString(e.age), 
 							Double.toString(p.x), 
 							Double.toString(p.y), 
