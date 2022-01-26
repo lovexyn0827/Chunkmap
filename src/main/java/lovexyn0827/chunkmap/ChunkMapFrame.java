@@ -73,7 +73,7 @@ public class ChunkMapFrame extends JFrame {
 	private Map<ChunkPos, ChunkTicket<?>> manuallyLoadedChunks = new HashMap<>();
 
 	public ChunkMapFrame(MinecraftServer server) {
-		super("ChunkMap v20210718--" + server.getSaveProperties().getLevelName());
+		super("ChunkMap v20210825--" + server.getSaveProperties().getLevelName());
 		this.setSize(490, 640);
 		this.setLayout(new BorderLayout());
 		this.server = server;
@@ -300,14 +300,14 @@ public class ChunkMapFrame extends JFrame {
 			dia.add(jtf);
 			JButton b = new JButton("        Load       ");
 			b.addActionListener((ae) ->  {
-				this.load(ctm, pos, Integer.parseInt(jtf.getText()));
+				this.server.submitAndJoin(() -> this.load(ctm, pos, Integer.parseInt(jtf.getText())));
 				b.setEnabled(false);
 			});
 			dia.add(b);
 		} else if(this.manuallyLoadedChunks.containsKey(pos)) {
 			JButton b = new JButton("              Unload              ");
 			b.addActionListener((ae) ->  {
-				this.unload(ctm, pos);
+				this.server.submitAndJoin(() -> this.unload(ctm, pos));
 				b.setEnabled(false);
 			});
 			dia.add(b);
@@ -320,8 +320,10 @@ public class ChunkMapFrame extends JFrame {
 
 	private void unload(ChunkTicketManager ctm, ChunkPos pos) {
 		ChunkTicket<?> toRemove = this.manuallyLoadedChunks.get(pos);
-		((ChunkTicketManagerMixin)ctm).callRemoveTicket(pos.toLong(), toRemove);
-		this.manuallyLoadedChunks.remove(pos);
+		ctm.removeTicket(MANUAL_TICKET, pos, 33 - toRemove.getLevel(), null);
+		if(!((ChunkTicketManagerMixin)ctm).getTickets().get(pos.toLong()).contains(toRemove)) {
+			this.manuallyLoadedChunks.remove(pos);
+		}
 	}
 
 	private void load(ChunkTicketManager ctm, ChunkPos pos, int level) {
@@ -384,6 +386,7 @@ public class ChunkMapFrame extends JFrame {
 							.stream()
 							.map(ChunkTicket::getType)
 							.map(TICKET_TO_COLOR::get)
+							.map((in) -> in == null ? 0 : in)
 							.map(Color::new)
 							.filter((c) -> !colors.contains(c))
 							.forEach((colors::add));
