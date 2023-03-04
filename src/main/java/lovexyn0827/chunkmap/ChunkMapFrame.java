@@ -2,11 +2,15 @@ package lovexyn0827.chunkmap;
 
 import java.awt.BorderLayout;
 import java.awt.Canvas;
+import java.awt.CheckboxMenuItem;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Graphics;
 import java.awt.Image;
+import java.awt.Menu;
+import java.awt.MenuBar;
+import java.awt.MenuItem;
 import java.awt.Point;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
@@ -74,7 +78,7 @@ public class ChunkMapFrame extends JFrame {
 	private Object lastDimension;
 
 	public ChunkMapFrame(MinecraftServer server) {
-		super("ChunkMap v20210825--" + server.getSaveProperties().getLevelName());
+		super("ChunkMap v20230304--" + server.getSaveProperties().getLevelName());
 		this.setSize(490, 640);
 		this.setLayout(new BorderLayout());
 		this.server = server;
@@ -93,6 +97,59 @@ public class ChunkMapFrame extends JFrame {
 		jsp.setSize(480, 130);
 		this.add(jsp, "Center");
 		this.area = new MapArea(32, 32, -16, -16);
+		this.initInputs();
+		this.initMenu();
+		this.setVisible(true);
+	}
+
+	private void initMenu() {
+		// Dimension
+		MenuBar menu = new MenuBar();
+		Menu dimension = new Menu("Dimension");
+		MenuItem dim0 = new MenuItem("Overworld (1)");
+		dim0.addActionListener((ae) -> this.world = this.server.getWorld(World.OVERWORLD));
+		dimension.add(dim0);
+		MenuItem dim1 = new MenuItem("The End (2)");
+		dim1.addActionListener((ae) -> this.world = this.server.getWorld(World.END));
+		dimension.add(dim1);
+		MenuItem dimm1 = new MenuItem("The Nether (0)");
+		dimm1.addActionListener((ae) -> this.world = this.server.getWorld(World.NETHER));
+		dimension.add(dimm1);
+		menu.add(dimension);
+		// Mode
+		Menu mode = new Menu("Mode");
+		MenuItem loading = new MenuItem("Loading Status (L)");
+		loading.addActionListener((ae) -> this.setMode(DisplayMode.CHUNK_LOADING));
+		mode.add(loading);
+		MenuItem generation = new MenuItem("Generation (G)");
+		generation.addActionListener((ae) -> this.setMode(DisplayMode.GENERATION));
+		mode.add(generation);
+		MenuItem tickets = new MenuItem("Chunk Tickets (T)");
+		tickets.addActionListener((ae) -> this.setMode(DisplayMode.TICKETS));
+		mode.add(tickets);
+		menu.add(mode);
+		// View
+		Menu view = new Menu("View");
+		CheckboxMenuItem entitiesLayer = new CheckboxMenuItem("Entity Overlay (E)");
+		entitiesLayer.addItemListener((ae) -> this.renderEntityOverlay = entitiesLayer.getState());
+		view.add(entitiesLayer);
+		MenuItem move = new MenuItem("Go To (M)");
+		move.addActionListener((ae) -> this.openGoToDialog());
+		view.add(move);
+		menu.add(view);
+		// Help
+		Menu help = new Menu("Help");
+		MenuItem openHelp = new MenuItem("Help");
+		openHelp.addActionListener((ae) -> this.openHelps());
+		help.add(openHelp);
+		MenuItem about = new MenuItem("Abouts");
+		about.addActionListener((ae) -> this.openAbouts());
+		help.add(about);
+		menu.add(help);
+		this.setMenuBar(menu);
+	}
+
+	private void initInputs() {
 		this.map.addMouseListener(new MouseAdapter() {
 			@Override
 			public void mouseClicked(MouseEvent e) {
@@ -130,24 +187,7 @@ public class ChunkMapFrame extends JFrame {
 					ChunkMapFrame.this.world = ChunkMapFrame.this.server.getWorld(World.END);
 					break;
 				case 'm':
-					JDialog dia = new JDialog(ChunkMapFrame.this);
-					dia.setSize(100,150);
-					dia.setLayout(new FlowLayout(FlowLayout.CENTER));
-					JTextField x = new JTextField(6);
-					JTextField z = new JTextField(6);
-					dia.add(x);
-					dia.add(z);
-					
-					JButton b = new JButton("    OK    ");
-					b.addActionListener((ae) -> {
-						try {
-							ChunkMapFrame.this.moveCenterTo(Integer.parseInt(x.getText()), Integer.parseInt(z.getText()));
-							dia.setVisible(false);
-						} catch (NumberFormatException ex) {
-						}
-					});
-					dia.add(b);
-					dia.setVisible(true);
+					ChunkMapFrame.this.openGoToDialog();
 					break;
 				case 'l':
 					ChunkMapFrame.this.setMode(DisplayMode.CHUNK_LOADING);
@@ -167,8 +207,36 @@ public class ChunkMapFrame extends JFrame {
 				}
 			}
 		});
+	}
+
+	private void openAbouts() {
+		JDialog dia = new JDialog(ChunkMapFrame.this);
+		dia.setSize(320,80);
+		dia.setLayout(new FlowLayout(FlowLayout.CENTER));
+		dia.add(new JLabel("ChunkMap v20230304"));
+		dia.add(new JLabel("Website: https://github.com/lovexyn0827/Chunkmap"));
+		dia.setVisible(true);
+	}
+
+	protected void openGoToDialog() {
+		JDialog dia = new JDialog(ChunkMapFrame.this);
+		dia.setSize(100,150);
+		dia.setLayout(new FlowLayout(FlowLayout.CENTER));
+		JTextField x = new JTextField(6);
+		JTextField z = new JTextField(6);
+		dia.add(x);
+		dia.add(z);
 		
-		this.setVisible(true);
+		JButton b = new JButton("    OK    ");
+		b.addActionListener((ae) -> {
+			try {
+				this.moveCenterTo(Integer.parseInt(x.getText()), Integer.parseInt(z.getText()));
+				dia.setVisible(false);
+			} catch (NumberFormatException ex) {
+			}
+		});
+		dia.add(b);
+		dia.setVisible(true);
 	}
 
 	protected void moveCenterTo(int x, int z) {
