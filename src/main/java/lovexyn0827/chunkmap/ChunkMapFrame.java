@@ -52,11 +52,13 @@ import net.minecraft.util.collection.SortedArraySet;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.ChunkPos;
+import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
 import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.chunk.ChunkStatus;
 import net.minecraft.world.chunk.WorldChunk;
+import sun.tools.tree.ThisExpression;
 
 @SuppressWarnings("serial")
 public class ChunkMapFrame extends JFrame {
@@ -72,7 +74,6 @@ public class ChunkMapFrame extends JFrame {
 	private JLabel status;
 	private JTextArea logArea;
 	private DisplayMode mode = DisplayMode.CHUNK_LOADING;
-	private long lastClick;
 	private boolean renderEntityOverlay;
 	private Map<ChunkPos, ChunkTicket<?>> manuallyLoadedChunks = new HashMap<>();
 	private Object lastDimension;
@@ -151,13 +152,37 @@ public class ChunkMapFrame extends JFrame {
 
 	private void initInputs() {
 		this.map.addMouseListener(new MouseAdapter() {
+			private int lastPressedX;
+			private int lastPressedY;
+			private long lastClickTime;
+			private boolean lastPressed;
+
 			@Override
 			public void mouseClicked(MouseEvent e) {
 				if(e.getButton() == MouseEvent.BUTTON1) {
-					if(Util.getMeasuringTimeMs() - ChunkMapFrame.this.lastClick < 827) {
+					if(Util.getMeasuringTimeMs() - this.lastClickTime < 827) {
 						ChunkMapFrame.this.showChunkDetails(e.getX() / 16, e.getY() / 16);
 					}
-					ChunkMapFrame.this.lastClick = Util.getMeasuringTimeMs();
+					
+					this.lastClickTime = Util.getMeasuringTimeMs();
+				}
+			}
+			
+			@Override
+			public void mousePressed(MouseEvent e) {
+				boolean pressed = e.getButton() == 1;
+				if(this.lastPressed != pressed) {
+					this.lastPressedX = e.getX();
+					this.lastPressedY = e.getY();
+				}
+			}
+			
+			@Override
+			public void mouseReleased(MouseEvent e) {
+				int dx = this.lastPressedX - e.getX();
+				int dy = this.lastPressedY - e.getY();
+				if(MathHelper.absMax(dx, dy) >= 10) {
+					ChunkMapFrame.this.moveMap(dx / 16, dy / 16);
 				}
 			}
 		});
