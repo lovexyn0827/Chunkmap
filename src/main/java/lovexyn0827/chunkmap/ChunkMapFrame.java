@@ -40,7 +40,8 @@ import lovexyn0827.chunkmap.mixins.ThreadedAnvilChunkStorageMixin;
 import net.minecraft.entity.Entity;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.world.ChunkHolder;
-import net.minecraft.server.world.ChunkHolder.LevelType;
+import net.minecraft.server.world.ChunkLevelType;
+import net.minecraft.server.world.ChunkLevels;
 import net.minecraft.server.world.ChunkTicket;
 import net.minecraft.server.world.ChunkTicketManager;
 import net.minecraft.server.world.ChunkTicketType;
@@ -61,9 +62,9 @@ import net.minecraft.world.chunk.WorldChunk;
 
 @SuppressWarnings("serial")
 public class ChunkMapFrame extends JFrame {
-	private static final ImmutableMap<ChunkHolder.LevelType, Integer> LOADING_LVL_TO_COLOR;
+	private static final ImmutableMap<ChunkLevelType, Integer> LOADING_LVL_TO_COLOR;
 	private static final ImmutableMap<ChunkTicketType<?>, Integer> TICKET_TO_COLOR;
-	private static final ImmutableMap<LevelType, String> LOADING_LVL_TO_NAME;
+	private static final ImmutableMap<ChunkLevelType, String> LOADING_LVL_TO_NAME;
 	private static final ImmutableMap<ChunkStatus, Integer> CHUNK_STATUS_TO_COLOR;
 	private static final ChunkTicketType<ChunkPos> MANUAL_TICKET = ChunkTicketType.<ChunkPos>create("manual", (a, b) -> 1);
 	private ServerWorld world;
@@ -279,7 +280,7 @@ public class ChunkMapFrame extends JFrame {
 		l1.setBounds(0, y, 220, 16);
 		dia.add(l1);
 		y += 16;
-		for(Map.Entry<ChunkHolder.LevelType, Integer> entry : LOADING_LVL_TO_COLOR.entrySet()) {
+		for(Map.Entry<ChunkLevelType, Integer> entry : LOADING_LVL_TO_COLOR.entrySet()) {
 			JLabel l = new JLabel(LOADING_LVL_TO_NAME.get(entry.getKey()), 
 					new ExampleChunkIcon(entry.getValue()), 
 					SwingConstants.LEFT);
@@ -293,7 +294,7 @@ public class ChunkMapFrame extends JFrame {
 		dia.add(l2);
 		y += 16;
 		for(Map.Entry<ChunkStatus, Integer> entry : CHUNK_STATUS_TO_COLOR.entrySet()) {
-			JLabel l = new JLabel(entry.getKey().getId(), 
+			JLabel l = new JLabel(entry.getKey().toString(), 
 					new ExampleChunkIcon(entry.getValue()), 
 					SwingConstants.LEFT);
 			l.setBounds(0, y, 220, 16);
@@ -340,7 +341,8 @@ public class ChunkMapFrame extends JFrame {
 				dia.add(new JLabel("                 Status : " + ch.getCurrentChunk().getStatus() + "               "));
 			}
 			
-			dia.add(new JLabel("               Loading Level : " + ch.getLevel() + "(" + LOADING_LVL_TO_NAME.get(ChunkHolder.getLevelType(ch.getLevel())) + ")" + "               "));
+			dia.add(new JLabel("               Loading Level : " + ch.getLevel() 
+					+ "(" + LOADING_LVL_TO_NAME.get(ChunkLevels.getType(ch.getLevel())) + ")" + "               "));
 			List<String[]> list = new ArrayList<>();
 			list.add(new String[] {"Type", "Age", "Source"});
 			((ChunkTicketManagerMixin)ctm).getTickets()
@@ -461,7 +463,7 @@ public class ChunkMapFrame extends JFrame {
 					g.setColor(Color.WHITE);
 					g.fillRect(dx * 16, dz * 16, 16, 16);
 				} else {
-					g.setColor(new Color(LOADING_LVL_TO_COLOR.get(ChunkHolder.getLevelType(ch.getLevel()))));
+					g.setColor(new Color(LOADING_LVL_TO_COLOR.get(ChunkLevels.getType(ch.getLevel()))));
 					g.fillRect(dx * 16, dz * 16, dx * 16 + 16, dz * 16 + 16);
 					g.setColor(this.world.isChunkLoaded(pos.x, pos.z) ? Color.BLACK : Color.GRAY);
 					g.drawString(Integer.toString(ch.getLevel()), dx * 16, dz * 16 + 16);
@@ -528,7 +530,6 @@ public class ChunkMapFrame extends JFrame {
 		ChunkPos originChunk = this.area.getOriginPos();
 		Vec3d origin = new Vec3d(originChunk.getStartX(), 0, originChunk.getStartZ());
 		if(this.renderEntityOverlay) {
-			// FIXME Avoid chunk loading
 			for(Entity e : this.world.getOtherEntities(null, new Box(originChunk.getStartPos()).stretch(480, 10E7, 480))) {
 				Vec3d p = e.getPos().subtract(origin);
 				g.fillOval((int)p.x - 3, (int)p.z - 3, 6, 6);
@@ -577,17 +578,17 @@ public class ChunkMapFrame extends JFrame {
 	}
 
 	static {
-		LOADING_LVL_TO_COLOR = new ImmutableMap.Builder<ChunkHolder.LevelType, Integer>()
-				.put(ChunkHolder.LevelType.ENTITY_TICKING, 0xAADD00)
-				.put(ChunkHolder.LevelType.TICKING, 0xFF0000)
-				.put(ChunkHolder.LevelType.BORDER, 0xFFCC00)
-				.put(ChunkHolder.LevelType.INACCESSIBLE, 0xCCCCCC)
+		LOADING_LVL_TO_COLOR = new ImmutableMap.Builder<ChunkLevelType, Integer>()
+				.put(ChunkLevelType.ENTITY_TICKING, 0xAADD00)
+				.put(ChunkLevelType.BLOCK_TICKING, 0xFF0000)
+				.put(ChunkLevelType.FULL, 0xFFCC00)
+				.put(ChunkLevelType.INACCESSIBLE, 0xCCCCCC)
 				.build();
-		LOADING_LVL_TO_NAME = new ImmutableMap.Builder<ChunkHolder.LevelType, String>()
-				.put(ChunkHolder.LevelType.ENTITY_TICKING, "Entity Processing")
-				.put(ChunkHolder.LevelType.TICKING, "Redstone Ticking")
-				.put(ChunkHolder.LevelType.BORDER, "Border")
-				.put(ChunkHolder.LevelType.INACCESSIBLE,"Inaccessible")
+		LOADING_LVL_TO_NAME = new ImmutableMap.Builder<ChunkLevelType, String>()
+				.put(ChunkLevelType.ENTITY_TICKING, "Entity Processing")
+				.put(ChunkLevelType.BLOCK_TICKING, "Redstone Ticking")
+				.put(ChunkLevelType.FULL, "Border")
+				.put(ChunkLevelType.INACCESSIBLE,"Inaccessible")
 				.build();
 		TICKET_TO_COLOR = new ImmutableMap.Builder<ChunkTicketType<?>, Integer>()
 				.put(ChunkTicketType.PLAYER, 0x0000DD)
@@ -602,11 +603,10 @@ public class ChunkMapFrame extends JFrame {
 				.build();
 		CHUNK_STATUS_TO_COLOR = new ImmutableMap.Builder<ChunkStatus, Integer>()
 				.put(ChunkStatus.FULL, 0xBBBBBB)
-				.put(ChunkStatus.HEIGHTMAPS, 0x333333)
 				.put(ChunkStatus.SPAWN, 0x003333)
 				.put(ChunkStatus.LIGHT, 0x555500)
+				.put(ChunkStatus.INITIALIZE_LIGHT, 0x333333)
 				.put(ChunkStatus.FEATURES, 0x88BB22)
-				.put(ChunkStatus.LIQUID_CARVERS, 0x654321)
 				.put(ChunkStatus.CARVERS, 0x330033)
 				.put(ChunkStatus.SURFACE, 0x333300)
 				.put(ChunkStatus.NOISE, 0x330000)
